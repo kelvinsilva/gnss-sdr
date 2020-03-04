@@ -136,6 +136,9 @@ hybrid_observables_gs::hybrid_observables_gs(const Obs_Conf &conf_) : gr::block(
     d_channel_last_carrier_phase_rads = std::vector<double>(d_nchannels_out, 0.0);
 
     d_smooth_filter_M = static_cast<double>(conf_.smoothing_factor);
+
+    initial_carrier_phase_offset_estimation_rads = std::vector<double>(d_nchannels_in, 0.0);
+    channel_initialized = std::vector<bool>(d_nchannels_in, false);
 }
 
 
@@ -597,6 +600,31 @@ void hybrid_observables_gs::smooth_pseudoranges(std::vector<Gnss_Synchro> &data)
         }
 }
 
+void hybrid_observables_gs::initialize_and_apply_carrier_phase_offset(std::vector<Gnss_Synchro> &epoch_data, uint64_t rx_clock_count_samples)
+{
+    //check if we need to reset the initial carrier phase offsets to match their pseudoranges
+    for (uint32_t n = 0; n < d_nchannels_out; n++)
+        {
+            if (epoch_data.at(n).Flag_valid_pseudorange == true)
+                {
+                    // check if an initialization is required (new satellite or loss of lock)
+                    // it is set to false by the work function if the gnss_synchro is not valid
+                    if (channel_initialized.at(n) == false)
+                        {
+                            //std::cout << "a: " << static_cast<double>(rx_clock_count_samples) << " b: " << static_cast<double>(epoch_data.at(n).fs) << "\n";
+
+                            double T_rx = static_cast<double>(rx_clock_count_samples) / static_cast<double>(epoch_data.at(n).fs);
+                            double remnant_carrier_phase_rad = PI_2 * (T_rx - floor(T_rx));
+
+                            initial_carrier_phase_offset_estimation_rads.at(n) = epoch_data.at(n).Carrier_phase_rads - remnant_carrier_phase_rad;
+                            channel_initialized.at(n) = true;
+                            LOG(INFO) << "Initialized carrier phase at channel " << n << " with " << remnant_carrier_phase_rad << " \n";
+                        }
+                    // apply the carrier phase offset to this satellite
+                    epoch_data.at(n).Carrier_phase_rads = epoch_data.at(n).Carrier_phase_rads - initial_carrier_phase_offset_estimation_rads.at(n);
+                }
+        }
+}
 
 int hybrid_observables_gs::general_work(int noutput_items __attribute__((unused)),
     gr_vector_int &ninput_items, gr_vector_const_void_star &input_items,
@@ -654,6 +682,7 @@ int hybrid_observables_gs::general_work(int noutput_items __attribute__((unused)
                             interpolated_gnss_synchro.Flag_valid_acquisition = false;
                             interpolated_gnss_synchro.fs = 0;
                             interpolated_gnss_synchro.Channel_ID = n;
+                            channel_initialized.at(n) = false;  // the current channel is not reporting valid observable, thus, re-init the carrier phase
                         }
                     else
                         {
@@ -677,7 +706,10 @@ int hybrid_observables_gs::general_work(int noutput_items __attribute__((unused)
             if (n_valid > 0)
                 {
                     compute_pranges(epoch_data);
+                    // initialize and apply carrier phase coherent initialization
+                    initialize_and_apply_carrier_phase_offset(epoch_data, d_Rx_clock_buffer.front());
                 }
+
 
             // Carrier smoothing (optional)
             if (d_conf.enable_carrier_smoothing == true)

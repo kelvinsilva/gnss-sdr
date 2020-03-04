@@ -2163,7 +2163,7 @@ int rtklib_pvt_gs::work(int noutput_items, gr_vector_const_void_star& input_item
                         {
                             // initialize (if needed) the accumulated phase offset and apply it to the active channels
                             // required to report accumulated phase cycles comparable to pseudoranges
-                            initialize_and_apply_carrier_phase_offset();
+                            //initialize_and_apply_carrier_phase_offset();
 
                             double Rx_clock_offset_s = d_user_pvt_solver->get_time_offset_s();
                             if (d_enable_rx_clock_correction == true and fabs(Rx_clock_offset_s) > 0.000001)  // 1us !!

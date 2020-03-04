@@ -85,6 +85,10 @@ private:
     double d_smooth_filter_M;
     void smooth_pseudoranges(std::vector<Gnss_Synchro>& data);
 
+    std::vector<double> initial_carrier_phase_offset_estimation_rads;
+    std::vector<bool> channel_initialized;
+    void initialize_and_apply_carrier_phase_offset(std::vector<Gnss_Synchro>& epoch_data, uint64_t rx_clock_count_samples);
+
     bool T_rx_TOW_set;  // rx time follow GPST
     bool d_dump;
     bool d_dump_mat;
